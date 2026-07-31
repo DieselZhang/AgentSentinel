@@ -74,3 +74,54 @@ async fn main() -> anyhow::Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Commands;
+    use clap::Parser;
+
+    #[test]
+    fn test_run_command_parsing() {
+        let cli = super::Cli::try_parse_from([
+            "agent-sentinel",
+            "run",
+            "--task",
+            "demo",
+            "--prompt",
+            "hello",
+            "--provider",
+            "deepseek",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Commands::Run {
+                task,
+                prompt,
+                provider,
+                ..
+            } => {
+                assert_eq!(task, "demo");
+                assert_eq!(prompt, "hello");
+                assert_eq!(provider, "deepseek");
+            }
+            _ => panic!("expected Run command"),
+        }
+    }
+
+    #[test]
+    fn test_upload_command_parsing() {
+        let cli = super::Cli::try_parse_from(["agent-sentinel", "upload", "trace.json"]).unwrap();
+
+        match cli.command {
+            Commands::Upload { file, .. } => assert_eq!(file, "trace.json"),
+            _ => panic!("expected Upload command"),
+        }
+    }
+
+    #[test]
+    fn test_missing_required_arg_fails() {
+        // `run` requires both --task and --prompt.
+        assert!(super::Cli::try_parse_from(["agent-sentinel", "run"]).is_err());
+    }
+}

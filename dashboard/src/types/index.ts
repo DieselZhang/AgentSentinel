@@ -46,6 +46,18 @@ export interface RunListResponse {
   total: number
 }
 
+export interface CompareSummary {
+  score_diff: number
+  turns_diff: number
+  tokens_diff: number
+  duration_diff_ms: number
+}
+
+export interface CompareResponse {
+  runs: RunDetail[]
+  comparison: CompareSummary
+}
+
 export interface UploadRequest {
   task_name: string
   model: string

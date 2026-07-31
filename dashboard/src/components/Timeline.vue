@@ -4,6 +4,7 @@ import { ref } from 'vue'
 
 defineProps<{
   toolCalls: ToolCallRecord[]
+  highlightIndexes?: number[]
 }>()
 
 const expanded = ref<Record<number, boolean>>({})
@@ -35,7 +36,11 @@ function formatTime(ts: string): string {
       class="timeline-item"
     >
       <div class="timeline-dot" :class="{ blocked: call.blocked, error: call.is_error }" />
-      <div class="timeline-content" @click="toggle(idx)">
+      <div
+        class="timeline-content"
+        :class="{ highlighted: highlightIndexes && highlightIndexes.includes(idx) }"
+        @click="toggle(idx)"
+      >
         <div class="timeline-header">
           <span class="tool-name">{{ call.tool_name }}</span>
           <div class="badges">
@@ -111,6 +116,11 @@ function formatTime(ts: string): string {
 }
 .timeline-content:hover {
   border-color: #58a6ff;
+}
+.timeline-content.highlighted {
+  border-color: #d29922;
+  background: rgba(210, 153, 34, 0.08);
+  box-shadow: 0 0 0 1px rgba(210, 153, 34, 0.5);
 }
 .timeline-header {
   display: flex;

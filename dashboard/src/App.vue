@@ -5,6 +5,7 @@
       <div class="nav-links">
         <router-link to="/">Runs</router-link>
         <router-link to="/upload">Upload</router-link>
+        <router-link to="/compare">Compare</router-link>
       </div>
     </nav>
     <main class="main-content">

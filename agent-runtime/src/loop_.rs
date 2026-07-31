@@ -72,15 +72,24 @@ pub async fn run_agent(
                     config.tracer.emit(event.clone());
                     events.push(event);
                 }
-                Ok(StreamEvent::ToolCallStart { id, name, arguments: _ }) => {
+                Ok(StreamEvent::ToolCallStart { id, name, .. }) => {
+                    // Marks the beginning of a tool call. Arguments are empty here;
+                    // the full arguments arrive with ToolCallFull.
                     let event = AgentEvent::ToolCallStart {
-                        tool_name: name.clone(),
-                        tool_call_id: id.clone(),
+                        tool_name: name,
+                        tool_call_id: id,
                         arguments: serde_json::json!({}),
                     };
                     config.tracer.emit(event.clone());
                     events.push(event);
-                    tool_calls.push(ToolCall { id, name, arguments: serde_json::json!({}) });
+                }
+                Ok(StreamEvent::ToolCallFull { id, name, arguments }) => {
+                    tool_calls.push(ToolCall { id, name, arguments });
+                }
+                Ok(StreamEvent::ThinkingDelta(text)) => {
+                    let event = AgentEvent::ThinkingDelta { text };
+                    config.tracer.emit(event.clone());
+                    events.push(event);
                 }
                 Ok(StreamEvent::MessageStop { stop_reason: sr }) => {
                     stop_reason = sr;
@@ -90,7 +99,11 @@ pub async fn run_agent(
                     config.tracer.emit(event.clone());
                     events.push(event);
                 }
-                _ => {}
+                Err(e) => {
+                    let event = AgentEvent::Error { message: e.to_string() };
+                    config.tracer.emit(event.clone());
+                    events.push(event);
+                }
             }
         }
 
@@ -129,6 +142,7 @@ pub async fn run_agent(
                             result: format!("Blocked: {}", reason),
                             is_error: true,
                             blocked: true,
+                            arguments: tc.arguments.clone(),
                         };
                         config.tracer.emit(event.clone());
                         events.push(event);
@@ -140,6 +154,7 @@ pub async fn run_agent(
                             result: result.content.clone(),
                             is_error: result.is_error,
                             blocked: false,
+                            arguments: tc.arguments.clone(),
                         };
                         config.tracer.emit(event.clone());
                         events.push(event);
@@ -153,6 +168,7 @@ pub async fn run_agent(
                         result: msg.clone(),
                         is_error: true,
                         blocked: false,
+                        arguments: tc.arguments.clone(),
                     };
                     config.tracer.emit(event.clone());
                     events.push(event);
@@ -196,16 +212,13 @@ pub async fn run_agent(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::provider::MockProvider;
+    use crate::provider::{MockProvider, StreamEvent};
     use crate::policy::AllowAll;
 
-    #[tokio::test]
-    async fn test_agent_loop_simple_response() {
-        let provider = Arc::new(MockProvider::new(vec!["Hello, world!".to_string()]));
+    fn test_config(provider: Arc<dyn LlmProvider>) -> AgentConfig {
         let policy: Arc<dyn PermissionPolicy> = Arc::new(AllowAll);
         let tracer = Arc::new(crate::trace::InMemoryEmitter::new());
-
-        let config = AgentConfig {
+        AgentConfig {
             system_prompt: "You are helpful.".to_string(),
             max_turns: 5,
             tools: vec![],
@@ -213,10 +226,57 @@ mod tests {
             provider,
             tracer: tracer.clone(),
             model: "test-model".to_string(),
-        };
+        }
+    }
+
+    #[tokio::test]
+    async fn test_agent_loop_simple_response() {
+        let provider = Arc::new(MockProvider::new_text(vec!["Hello, world!".to_string()]));
+        let config = test_config(provider);
 
         let (messages, events) = run_agent(config, "test", "Say hello").await.unwrap();
         assert!(!messages.is_empty());
         assert!(events.iter().any(|e| matches!(e, AgentEvent::RunEnd { status } if status == "success")));
+    }
+
+    #[tokio::test]
+    async fn test_agent_loop_accumulates_tool_call_arguments() {
+        let provider = Arc::new(MockProvider::new(vec![
+            StreamEvent::ToolCallStart {
+                id: "call_1".to_string(),
+                name: "read_file".to_string(),
+                arguments: String::new(),
+            },
+            StreamEvent::ToolCallFull {
+                id: "call_1".to_string(),
+                name: "read_file".to_string(),
+                arguments: serde_json::json!({"path": "/tmp/test.txt"}),
+            },
+            StreamEvent::MessageStop {
+                stop_reason: "tool_use".to_string(),
+            },
+        ]));
+        let config = test_config(provider);
+
+        let (messages, events) = run_agent(config, "test", "Read the file").await.unwrap();
+
+        // The tool call with full arguments must be recorded on the assistant message.
+        let assistant = messages.iter().find(|m| m.role == Role::Assistant).unwrap();
+        assert_eq!(assistant.tool_calls.len(), 1);
+        assert_eq!(assistant.tool_calls[0].id, "call_1");
+        assert_eq!(assistant.tool_calls[0].arguments, serde_json::json!({"path": "/tmp/test.txt"}));
+
+        // The ToolCallStart event must carry an empty object (not the arguments),
+        // and the ToolCallEnd event must carry the full arguments.
+        assert!(events.iter().any(|e| matches!(
+            e,
+            AgentEvent::ToolCallStart { tool_call_id, arguments, .. }
+                if tool_call_id == "call_1" && *arguments == serde_json::json!({})
+        )));
+        assert!(events.iter().any(|e| matches!(
+            e,
+            AgentEvent::ToolCallEnd { tool_call_id, arguments, .. }
+                if tool_call_id == "call_1" && *arguments == serde_json::json!({"path": "/tmp/test.txt"})
+        )));
     }
 }

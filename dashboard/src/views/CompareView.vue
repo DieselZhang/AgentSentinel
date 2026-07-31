@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useRunsStore } from '@/stores/runs'
 import SafetyScore from '@/components/SafetyScore.vue'
 import Timeline from '@/components/Timeline.vue'
+import type { RunDetail } from '@/types'
 
 const store = useRunsStore()
 
@@ -16,6 +17,50 @@ function formatDuration(ms: number): string {
   const mins = Math.floor(ms / 60000)
   const secs = Math.round((ms % 60000) / 1000)
   return `${mins}m ${secs}s`
+}
+
+function diffText(v: number, formatNumber = false): string {
+  if (v === 0) return '='
+  const sign = v > 0 ? '+' : ''
+  return sign + (formatNumber ? v.toLocaleString() : String(v))
+}
+
+function diffClass(v: number): string {
+  if (v === 0) return 'diff-zero'
+  return v > 0 ? 'diff-pos' : 'diff-neg'
+}
+
+function formatSignedDuration(ms: number): string {
+  if (ms === 0) return '='
+  return `${ms > 0 ? '+' : '-'}${formatDuration(Math.abs(ms))}`
+}
+
+function otherRun(runIdx: number): RunDetail | null {
+  if (store.comparedRuns.length !== 2) return null
+  return store.comparedRuns[runIdx === 0 ? 1 : 0]
+}
+
+function isHigherScore(runIdx: number): boolean {
+  const run = store.comparedRuns[runIdx]
+  const other = otherRun(runIdx)
+  if (!run || !other) return false
+  return run.safety_score > other.safety_score
+}
+
+function differingToolIndexes(runIdx: number): number[] {
+  const run = store.comparedRuns[runIdx]
+  const other = otherRun(runIdx)
+  if (!run || !other) return []
+  const indexes: number[] = []
+  run.tool_calls.forEach((call, idx) => {
+    const differs = other.tool_calls.some(
+      (oc) =>
+        oc.tool_name === call.tool_name &&
+        (oc.blocked !== call.blocked || oc.result !== call.result),
+    )
+    if (differs) indexes.push(idx)
+  })
+  return indexes
 }
 
 async function doCompare() {
@@ -70,10 +115,38 @@ async function doCompare() {
 
     <div v-if="store.loading" class="loading">Loading comparison...</div>
 
-    <div
-      v-else-if="store.comparedRuns.length === 2"
-      class="compare-results"
-    >
+    <template v-else-if="store.comparedRuns.length === 2">
+      <div v-if="store.comparison" class="diff-card">
+        <h3>Differences (Run 1 vs Run 2)</h3>
+        <div class="diff-grid">
+          <div class="diff-item">
+            <span class="diff-key">Safety Score</span>
+            <span class="diff-val" :class="diffClass(store.comparison.score_diff)">
+              {{ diffText(store.comparison.score_diff) }}
+            </span>
+          </div>
+          <div class="diff-item">
+            <span class="diff-key">Turns</span>
+            <span class="diff-val" :class="diffClass(store.comparison.turns_diff)">
+              {{ diffText(store.comparison.turns_diff) }}
+            </span>
+          </div>
+          <div class="diff-item">
+            <span class="diff-key">Tokens</span>
+            <span class="diff-val" :class="diffClass(store.comparison.tokens_diff)">
+              {{ diffText(store.comparison.tokens_diff, true) }}
+            </span>
+          </div>
+          <div class="diff-item">
+            <span class="diff-key">Duration</span>
+            <span class="diff-val" :class="diffClass(store.comparison.duration_diff_ms)">
+              {{ formatSignedDuration(store.comparison.duration_diff_ms) }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="compare-results">
       <div
         v-for="(run, idx) in store.comparedRuns"
         :key="run.run_id"
@@ -85,7 +158,9 @@ async function doCompare() {
         </div>
 
         <div class="score-center">
-          <SafetyScore :score="run.safety_score" :size="140" />
+          <div class="score-badge-wrap" :class="{ 'score-higher': isHigherScore(idx) }">
+            <SafetyScore :score="run.safety_score" :size="140" />
+          </div>
         </div>
 
         <div class="stats-table">
@@ -127,10 +202,11 @@ async function doCompare() {
 
         <div class="compare-section">
           <h3>Tool Calls</h3>
-          <Timeline :tool-calls="run.tool_calls" />
+          <Timeline :tool-calls="run.tool_calls" :highlight-indexes="differingToolIndexes(idx)" />
         </div>
       </div>
     </div>
+    </template>
   </div>
 </template>
 
@@ -215,6 +291,50 @@ async function doCompare() {
   color: #8b949e;
   font-size: 16px;
 }
+.diff-card {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 16px 20px;
+}
+.diff-card h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e1e4e8;
+  margin-bottom: 12px;
+}
+.diff-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.diff-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.diff-key {
+  font-size: 12px;
+  color: #8b949e;
+  font-weight: 600;
+}
+.diff-val {
+  font-size: 18px;
+  font-weight: 700;
+}
+.diff-pos {
+  color: #3fb950;
+}
+.diff-neg {
+  color: #f85149;
+}
+.diff-zero {
+  color: #8b949e;
+}
 .compare-results {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -245,6 +365,15 @@ async function doCompare() {
   display: flex;
   justify-content: center;
   padding: 12px 0;
+}
+.score-badge-wrap {
+  border: 2px solid transparent;
+  border-radius: 50%;
+  padding: 4px;
+  transition: border-color 0.2s;
+}
+.score-badge-wrap.score-higher {
+  border-color: #3fb950;
 }
 .stats-table {
   display: flex;
@@ -306,6 +435,9 @@ async function doCompare() {
 @media (max-width: 768px) {
   .compare-results {
     grid-template-columns: 1fr;
+  }
+  .diff-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 </style>

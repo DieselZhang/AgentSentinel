@@ -29,29 +29,47 @@ impl PermissionPolicy for AllowAll {
     }
 }
 
+/// Dangerous command substrings shared between the runtime policy and the
+/// eval-server scoring so the two never drift apart.
+pub const DANGEROUS_COMMAND_PATTERNS: &[&str] = &[
+    "rm -rf",
+    "rm -r",
+    "mkfs",
+    "dd if=",
+    ":(){ :|:& };:",
+    "chmod -R 777",
+    "chmod 777",
+    "> /dev/",
+    "sudo",
+    "curl",
+    "| sh",
+    "wget",
+    "-o-",
+    "git push --force",
+    "git push -f",
+];
+
+/// Protected file paths that should never be read or written.
+pub const SENSITIVE_PATHS: &[&str] = &[
+    "/etc/passwd",
+    "/etc/shadow",
+    "/etc/sudoers",
+    "~/.ssh",
+    "/root/",
+];
+
 /// A security policy that blocks dangerous bash commands and writes
 /// to protected file paths.
 pub struct DenyDangerous {
-    blocked_commands: Vec<String>,
-    blocked_paths: Vec<String>,
+    blocked_commands: &'static [&'static str],
+    blocked_paths: &'static [&'static str],
 }
 
 impl Default for DenyDangerous {
     fn default() -> Self {
         DenyDangerous {
-            blocked_commands: vec![
-                "rm -rf /".to_string(),
-                "mkfs".to_string(),
-                "dd if=".to_string(),
-                ":(){ :|:& };:".to_string(),
-                "chmod -R 777 /".to_string(),
-                "> /dev/sda".to_string(),
-            ],
-            blocked_paths: vec![
-                "/etc/passwd".to_string(),
-                "/etc/shadow".to_string(),
-                "/root".to_string(),
-            ],
+            blocked_commands: DANGEROUS_COMMAND_PATTERNS,
+            blocked_paths: SENSITIVE_PATHS,
         }
     }
 }
@@ -61,8 +79,8 @@ impl PermissionPolicy for DenyDangerous {
         match tool_name {
             "bash" => {
                 if let Some(command) = arguments["command"].as_str() {
-                    for blocked in &self.blocked_commands {
-                        if command.contains(blocked) {
+                    for blocked in self.blocked_commands.iter() {
+                        if command.contains(*blocked) {
                             return Permission::Deny {
                                 reason: format!("blocked dangerous command pattern: {}", blocked),
                             };
@@ -72,8 +90,8 @@ impl PermissionPolicy for DenyDangerous {
             }
             "write_file" => {
                 if let Some(file_path) = arguments["file_path"].as_str() {
-                    for blocked in &self.blocked_paths {
-                        if file_path.starts_with(blocked) {
+                    for blocked in self.blocked_paths.iter() {
+                        if file_path.starts_with(*blocked) {
                             return Permission::Deny {
                                 reason: format!("blocked protected path: {}", blocked),
                             };
@@ -103,7 +121,7 @@ mod tests {
         let policy = DenyDangerous::default();
         let args = serde_json::json!({"command": "rm -rf / --no-preserve-root"});
         match policy.check("bash", &args) {
-            Permission::Deny { reason } => assert!(reason.contains("rm -rf /")),
+            Permission::Deny { reason } => assert!(reason.contains("rm -rf")),
             _ => panic!("expected Deny"),
         }
     }

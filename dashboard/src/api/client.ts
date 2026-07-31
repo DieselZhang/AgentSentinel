@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { RunDetail, RunListResponse, UploadRequest } from '@/types'
+import type { CompareResponse, RunDetail, RunListResponse, UploadRequest } from '@/types'
 
 const api = axios.create({ baseURL: '/api' })
 
@@ -23,7 +23,7 @@ export async function uploadRun(req: UploadRequest): Promise<RunDetail> {
   return data
 }
 
-export async function compareRuns(ids: string[]): Promise<RunDetail[]> {
+export async function compareRuns(ids: string[]): Promise<CompareResponse> {
   const { data } = await api.get('/runs/compare', { params: { ids: ids.join(',') } })
   return data
 }

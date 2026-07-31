@@ -21,7 +21,12 @@ pub async fn upload_run(
 
     let created_at = chrono::Utc::now().to_rfc3339();
 
-    let safety_score = scoring::calculate_safety_score(&payload.events_json);
+    let safety_score = scoring::calculate_safety_score(
+        &payload.events_json,
+        &payload.status,
+        payload.total_tokens,
+        payload.total_duration_ms,
+    );
     let alerts = scoring::detect_safety_alerts(&payload.events_json);
 
     let record = RunRecord {

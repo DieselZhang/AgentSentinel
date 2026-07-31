@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { fetchRuns, fetchRun, compareRuns } from '@/api/client'
-import type { RunSummary, RunDetail } from '@/types'
+import type { CompareSummary, RunSummary, RunDetail } from '@/types'
 
 export const useRunsStore = defineStore('runs', () => {
   const runs = ref<RunSummary[]>([])
@@ -9,6 +9,7 @@ export const useRunsStore = defineStore('runs', () => {
   const loading = ref(false)
   const currentRun = ref<RunDetail | null>(null)
   const comparedRuns = ref<RunDetail[]>([])
+  const comparison = ref<CompareSummary | null>(null)
 
   async function loadRuns(params?: {
     task_name?: string
@@ -38,11 +39,23 @@ export const useRunsStore = defineStore('runs', () => {
   async function loadCompare(ids: string[]) {
     loading.value = true
     try {
-      comparedRuns.value = await compareRuns(ids)
+      const res = await compareRuns(ids)
+      comparedRuns.value = res.runs
+      comparison.value = res.comparison
     } finally {
       loading.value = false
     }
   }
 
-  return { runs, total, loading, currentRun, comparedRuns, loadRuns, loadRun, loadCompare }
+  return {
+    runs,
+    total,
+    loading,
+    currentRun,
+    comparedRuns,
+    comparison,
+    loadRuns,
+    loadRun,
+    loadCompare,
+  }
 })
