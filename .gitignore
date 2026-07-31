@@ -4,3 +4,5 @@ dist/
 *.db
 traces/
 .env
+docs/
+.scratch/
