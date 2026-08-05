@@ -5,7 +5,8 @@ use axum::{
     http::{Request, StatusCode},
     Router,
 };
-use eval_server::{build_app, db};
+use agent_runtime::scorer::SafetyScorer;
+use eval_server::{build_app, db, scoring::RuleBasedSafetyScorer};
 use http_body_util::BodyExt;
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -18,7 +19,8 @@ fn test_app() -> Router {
     let conn = Connection::open_in_memory().unwrap();
     let pool: db::DbPool = Arc::new(Mutex::new(conn));
     db::init_db(&pool).unwrap();
-    build_app(pool)
+    let scorer: Arc<dyn SafetyScorer> = Arc::new(RuleBasedSafetyScorer);
+    build_app(pool, scorer)
 }
 
 async fn send(app: &Router, req: Request<Body>) -> (StatusCode, String) {

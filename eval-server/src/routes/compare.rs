@@ -5,8 +5,9 @@ use axum::{
 };
 use serde::Serialize;
 
-use crate::db::{self, DbPool};
+use crate::db;
 use crate::models::{CompareQuery, RunDetail};
+use crate::AppState;
 
 #[derive(Debug, Serialize)]
 pub struct CompareResponse {
@@ -24,9 +25,11 @@ pub struct CompareSummary {
 
 /// GET /api/runs/compare?ids=id1,id2 — compare two runs side by side
 pub async fn compare_runs(
-    State(pool): State<DbPool>,
+    State(app): State<AppState>,
     Query(query): Query<CompareQuery>,
 ) -> Result<Json<CompareResponse>, (StatusCode, String)> {
+    let pool = app.pool.clone();
+
     let ids: Vec<&str> = query.ids.split(',').map(|s| s.trim()).collect();
 
     if ids.len() < 2 {

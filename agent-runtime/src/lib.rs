@@ -4,4 +4,6 @@ pub mod tool;
 pub mod tools;
 pub mod policy;
 pub mod trace;
+pub mod scorer;
+pub mod audit;
 pub mod loop_;

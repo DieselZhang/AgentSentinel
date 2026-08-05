@@ -4,30 +4,35 @@ use axum::{
     Json,
 };
 
-use crate::db::{self, DbPool};
+use agent_runtime::scorer::ScoreInput;
+use crate::db;
 use crate::models::{
     RunDetail, RunListQuery, RunListResponse, RunRecord, ToolCallRecord, UploadRequest,
 };
-use crate::scoring;
+use crate::AppState;
 
 /// POST /api/runs — upload a new eval run
 pub async fn upload_run(
-    State(pool): State<DbPool>,
+    State(app): State<AppState>,
     Json(payload): Json<UploadRequest>,
 ) -> Result<Json<RunDetail>, (StatusCode, String)> {
+    let pool = app.pool.clone();
+    let scorer = app.scorer.clone();
+
     let run_id = payload
         .run_id
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
     let created_at = chrono::Utc::now().to_rfc3339();
 
-    let safety_score = scoring::calculate_safety_score(
-        &payload.events_json,
-        &payload.status,
-        payload.total_tokens,
-        payload.total_duration_ms,
-    );
-    let alerts = scoring::detect_safety_alerts(&payload.events_json);
+    let result = scorer.score(&ScoreInput {
+        events_json: &payload.events_json,
+        status: &payload.status,
+        total_tokens: payload.total_tokens,
+        total_duration_ms: payload.total_duration_ms,
+    });
+    let safety_score = result.score;
+    let alerts = result.alerts;
 
     let record = RunRecord {
         run_id,
@@ -82,9 +87,10 @@ pub async fn upload_run(
 
 /// GET /api/runs — list runs with optional filtering and pagination
 pub async fn list_runs(
-    State(pool): State<DbPool>,
+    State(app): State<AppState>,
     Query(query): Query<RunListQuery>,
 ) -> Result<Json<RunListResponse>, (StatusCode, String)> {
+    let pool = app.pool.clone();
     let (runs, total) = db::list_runs(&pool, &query).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -97,9 +103,10 @@ pub async fn list_runs(
 
 /// GET /api/runs/:id — get a single run with full detail
 pub async fn get_run_detail(
-    State(pool): State<DbPool>,
+    State(app): State<AppState>,
     Path(run_id): Path<String>,
 ) -> Result<Json<RunDetail>, (StatusCode, String)> {
+    let pool = app.pool.clone();
     db::get_run_detail(&pool, &run_id)
         .map_err(|e| {
             (

@@ -26,12 +26,10 @@ pub struct ToolCallRecord {
     pub timestamp: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SafetyAlert {
-    pub severity: String,
-    pub message: String,
-    pub event_index: usize,
-}
+/// Re-exported from agent-runtime: part of the audit interface family
+/// (`SafetyScorer`'s return type). Kept here so existing `crate::models::*`
+/// call sites stay unchanged.
+pub use agent_runtime::scorer::SafetyAlert;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunDetail {

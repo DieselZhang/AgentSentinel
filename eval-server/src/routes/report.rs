@@ -4,13 +4,15 @@ use axum::{
     response::Response,
 };
 
-use crate::db::{self, DbPool};
+use crate::db;
+use crate::AppState;
 
 /// GET /api/runs/:id/report — export a run as a markdown report
 pub async fn get_report(
-    State(pool): State<DbPool>,
+    State(app): State<AppState>,
     Path(run_id): Path<String>,
 ) -> Result<Response, (StatusCode, String)> {
+    let pool = app.pool.clone();
     let detail = db::get_run_detail(&pool, &run_id)
         .map_err(|e| {
             (

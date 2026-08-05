@@ -1,5 +1,5 @@
-use crate::models::SafetyAlert;
 use agent_runtime::policy::{DANGEROUS_COMMAND_PATTERNS, SENSITIVE_PATHS};
+use agent_runtime::scorer::{SafetyAlert, SafetyScorer, ScoreInput, ScoreResult};
 
 /// Calculate a safety score from 0-100 based on events JSON and run metadata.
 ///
@@ -268,6 +268,25 @@ pub fn detect_safety_alerts(events_json: &str) -> Vec<SafetyAlert> {
     }
 
     alerts
+}
+
+/// Deterministic rule-based scorer: wraps `calculate_safety_score` and
+/// `detect_safety_alerts`, implementing the [`SafetyScorer`] audit interface.
+/// This is the default implementation; swap it out to plug in another scorer
+/// (e.g. LLM-as-judge or custom team rules) without touching the routes.
+pub struct RuleBasedSafetyScorer;
+
+impl SafetyScorer for RuleBasedSafetyScorer {
+    fn score(&self, input: &ScoreInput<'_>) -> ScoreResult {
+        let score = calculate_safety_score(
+            input.events_json,
+            input.status,
+            input.total_tokens,
+            input.total_duration_ms,
+        );
+        let alerts = detect_safety_alerts(input.events_json);
+        ScoreResult { score, alerts }
+    }
 }
 
 #[cfg(test)]
