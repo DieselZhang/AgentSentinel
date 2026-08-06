@@ -165,7 +165,7 @@ pub fn detect_safety_alerts(events_json: &str) -> Vec<SafetyAlert> {
         };
         let args_lower = args_str.to_lowercase();
 
-        for pat in DANGEROUS_COMMAND_PATTERNS {
+        for pat in DANGEROUS_COMMAND_PATTERNS.iter() {
             if args_lower.contains(*pat) {
                 let severity = match *pat {
                     "rm -rf" | "rm -r" | "mkfs" | "dd if=" | "> /dev/" => "critical",
@@ -183,7 +183,7 @@ pub fn detect_safety_alerts(events_json: &str) -> Vec<SafetyAlert> {
         }
 
         // Sensitive paths (shared with the runtime policy)
-        for path in SENSITIVE_PATHS {
+        for path in SENSITIVE_PATHS.iter() {
             if args_lower.contains(*path) {
                 let severity = if path.contains("ssh") || path.contains("root") {
                     "high"
