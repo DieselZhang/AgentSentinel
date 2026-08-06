@@ -2,10 +2,11 @@
 
 提供与 Rust 版 agent-runtime 对称的三条审计链路接口：
 - TraceEmitter       可观测（能看见）
-- PermissionPolicy   权限控制（能阻止）  —— 阶段 2
+- PermissionPolicy   权限控制（能阻止）
 - SafetyScorer       安全评分（能复盘）  —— 阶段 3
 """
 
+from agent_sentinel.permission import AllowAll, DenyDangerous, Permission, PermissionPolicy
 from agent_sentinel.trace import (
     AgentEvent,
     EventType,
@@ -20,4 +21,8 @@ __all__ = [
     "TraceEmitter",
     "InMemoryEmitter",
     "NoopEmitter",
+    "Permission",
+    "PermissionPolicy",
+    "AllowAll",
+    "DenyDangerous",
 ]
