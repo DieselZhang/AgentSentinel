@@ -10,6 +10,16 @@
 
 危险模式库来自仓库根 [patterns.json](../patterns.json)（单一数据源，与 Rust 版共享）。
 
+## 演示
+
+```bash
+cd python-sdk && python examples/demo_audit_loop.py
+```
+
+模拟两次 Agent 运行并输出审计报告：安全 Agent（高分、无告警）vs 危险 Agent（被拦截、低分、有告警），展示「记录 → 拦截 → 评分」完整闭环。
+
+## 测试
+
 ```bash
 cd python-sdk && python -m pytest
 ```
