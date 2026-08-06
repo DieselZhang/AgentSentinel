@@ -1,0 +1,17 @@
+[project]
+name = "agent-sentinel"
+version = "0.1.0"
+description = "AgentSentinel Python audit SDK: observability, permission, and safety scoring interfaces"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["agent_sentinel*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
