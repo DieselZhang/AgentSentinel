@@ -6,7 +6,7 @@
 | ------ | ------ | ------ | ------ |
 | 可观测 | `agent_sentinel.trace` | `TraceEmitter` | ✅ |
 | 权限控制 | `agent_sentinel.permission` | `PermissionPolicy` | ✅ |
-| 安全评分 | `agent_sentinel.scoring` | `SafetyScorer` | 阶段 3 |
+| 安全评分 | `agent_sentinel.scoring` | `SafetyScorer` | ✅ |
 
 危险模式库来自仓库根 [patterns.json](../patterns.json)（单一数据源，与 Rust 版共享）。
 
