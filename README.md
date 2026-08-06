@@ -44,9 +44,9 @@ cd eval-server && cargo run     # http://127.0.0.1:3001
 # 2. 启动 Dashboard
 cd dashboard && npm install && npm run dev  # http://localhost:5173
 
-# 3. 运行 Agent
+# 3. 运行 Agent（provider：anthropic 默认 / deepseek / openai）
 export ANTHROPIC_API_KEY="sk-ant-..."
-cd cli && cargo run -- run --task "hello" --prompt "Say hi"
+cd cli && cargo run -- run --task "hello" --prompt "Say hi" --provider openai
 
 # 4. 上传 Trace
 cargo run -- upload traces/hello_*.json

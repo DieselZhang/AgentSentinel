@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use agent_runtime::loop_::{run_agent, AgentConfig};
-use agent_runtime::provider::{AnthropicProvider, DeepseekProvider, LlmProvider};
+use agent_runtime::provider::{AnthropicProvider, DeepseekProvider, LlmProvider, OpenAIProvider};
 use agent_runtime::tools::read::ReadFile;
 use agent_runtime::tools::write::WriteFile;
 use agent_runtime::tools::bash::Bash;
@@ -38,14 +38,24 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Commands::Run { task, prompt, system, max_turns, provider } => {
-            let provider: Arc<dyn LlmProvider> = match provider.as_str() {
-                "deepseek" | "ds" => Arc::new(DeepseekProvider::from_env()?),
-                _ => Arc::new(AnthropicProvider::from_env()?),
+            let (provider, model) = match provider.as_str() {
+                "deepseek" | "ds" => (
+                    Arc::new(DeepseekProvider::from_env()?) as Arc<dyn LlmProvider>,
+                    std::env::var("DEEPSEEK_MODEL").unwrap_or_else(|_| "deepseek-chat".into()),
+                ),
+                "openai" | "oai" => (
+                    Arc::new(OpenAIProvider::from_env()?) as Arc<dyn LlmProvider>,
+                    std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".into()),
+                ),
+                _ => (
+                    Arc::new(AnthropicProvider::from_env()?) as Arc<dyn LlmProvider>,
+                    std::env::var("ANTHROPIC_MODEL").unwrap_or_else(|_| "claude-sonnet-4-5@20250929".into()),
+                ),
             };
             let policy: Arc<dyn PermissionPolicy> = Arc::new(DenyDangerous::default());
             let tracer = Arc::new(InMemoryEmitter::new());
             let tools: Vec<Arc<dyn Tool>> = vec![Arc::new(ReadFile), Arc::new(WriteFile), Arc::new(Bash)];
-            let config = AgentConfig { system_prompt: system, max_turns, tools, policy, provider, tracer: tracer.clone(), model: std::env::var("ANTHROPIC_MODEL").unwrap_or_else(|_|"claude-sonnet-4-5@20250929".into()) };
+            let config = AgentConfig { system_prompt: system, max_turns, tools, policy, provider, tracer: tracer.clone(), model };
             println!("Running: {}", task);
             let start = std::time::Instant::now();
             match run_agent(config, &task, &prompt).await {
@@ -105,6 +115,26 @@ mod tests {
                 assert_eq!(prompt, "hello");
                 assert_eq!(provider, "deepseek");
             }
+            _ => panic!("expected Run command"),
+        }
+    }
+
+    #[test]
+    fn test_openai_command_parsing() {
+        let cli = super::Cli::try_parse_from([
+            "agent-sentinel",
+            "run",
+            "--task",
+            "demo",
+            "--prompt",
+            "hello",
+            "--provider",
+            "openai",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Commands::Run { provider, .. } => assert_eq!(provider, "openai"),
             _ => panic!("expected Run command"),
         }
     }
