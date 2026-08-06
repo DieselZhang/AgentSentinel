@@ -1,4 +1,6 @@
+use serde::Deserialize;
 use std::fmt;
+use std::sync::LazyLock;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Permission {
@@ -29,34 +31,40 @@ impl PermissionPolicy for AllowAll {
     }
 }
 
+/// The shared danger-pattern data file. Single source of truth for the Rust
+/// runtime policy, the Rust eval-server scorer, and the Python audit SDK —
+/// edit the JSON, not the code, so the three never drift apart.
+#[derive(Deserialize)]
+struct PatternsFile {
+    dangerous_command_patterns: Vec<String>,
+    sensitive_paths: Vec<String>,
+}
+
+/// Load `patterns.json` from the repo root (one level above `agent-runtime/`)
+/// at compile time, so the shipped binary stays dependency-free at runtime.
+fn load_patterns() -> PatternsFile {
+    serde_json::from_str(include_str!("../../patterns.json"))
+        .expect("patterns.json should be valid JSON")
+}
+
 /// Dangerous command substrings shared between the runtime policy and the
 /// eval-server scoring so the two never drift apart.
-pub const DANGEROUS_COMMAND_PATTERNS: &[&str] = &[
-    "rm -rf",
-    "rm -r",
-    "mkfs",
-    "dd if=",
-    ":(){ :|:& };:",
-    "chmod -R 777",
-    "chmod 777",
-    "> /dev/",
-    "sudo",
-    "curl",
-    "| sh",
-    "wget",
-    "-o-",
-    "git push --force",
-    "git push -f",
-];
+pub static DANGEROUS_COMMAND_PATTERNS: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
+    load_patterns()
+        .dangerous_command_patterns
+        .into_iter()
+        .map(|s| &*Box::leak(s.into_boxed_str()))
+        .collect()
+});
 
 /// Protected file paths that should never be read or written.
-pub const SENSITIVE_PATHS: &[&str] = &[
-    "/etc/passwd",
-    "/etc/shadow",
-    "/etc/sudoers",
-    "~/.ssh",
-    "/root/",
-];
+pub static SENSITIVE_PATHS: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
+    load_patterns()
+        .sensitive_paths
+        .into_iter()
+        .map(|s| &*Box::leak(s.into_boxed_str()))
+        .collect()
+});
 
 /// A security policy that blocks dangerous bash commands and writes
 /// to protected file paths.
@@ -68,8 +76,8 @@ pub struct DenyDangerous {
 impl Default for DenyDangerous {
     fn default() -> Self {
         DenyDangerous {
-            blocked_commands: DANGEROUS_COMMAND_PATTERNS,
-            blocked_paths: SENSITIVE_PATHS,
+            blocked_commands: &DANGEROUS_COMMAND_PATTERNS[..],
+            blocked_paths: &SENSITIVE_PATHS[..],
         }
     }
 }

@@ -1,0 +1,26 @@
+{
+  "dangerous_command_patterns": [
+    "rm -rf",
+    "rm -r",
+    "mkfs",
+    "dd if=",
+    ":(){ :|:& };:",
+    "chmod -R 777",
+    "chmod 777",
+    "> /dev/",
+    "sudo",
+    "curl",
+    "| sh",
+    "wget",
+    "-o-",
+    "git push --force",
+    "git push -f"
+  ],
+  "sensitive_paths": [
+    "/etc/passwd",
+    "/etc/shadow",
+    "/etc/sudoers",
+    "~/.ssh",
+    "/root/"
+  ]
+}
