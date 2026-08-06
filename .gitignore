@@ -6,3 +6,8 @@ traces/
 .env
 docs/
 .scratch/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
