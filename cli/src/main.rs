@@ -19,20 +19,6 @@ enum Commands {
     Upload { file: String, #[arg(long, default_value = "http://127.0.0.1:3001")] server: String },
 }
 
-fn event_type_str(e: &agent_runtime::types::AgentEvent) -> &str {
-    match e {
-        agent_runtime::types::AgentEvent::TextDelta{..} => "text_delta",
-        agent_runtime::types::AgentEvent::ThinkingDelta{..} => "thinking",
-        agent_runtime::types::AgentEvent::ToolCallStart{..} => "tool_call_start",
-        agent_runtime::types::AgentEvent::ToolCallEnd{..} => "tool_call_end",
-        agent_runtime::types::AgentEvent::TurnStart{..} => "turn_start",
-        agent_runtime::types::AgentEvent::TurnEnd{..} => "turn_end",
-        agent_runtime::types::AgentEvent::RunStart{..} => "run_start",
-        agent_runtime::types::AgentEvent::RunEnd{..} => "run_end",
-        agent_runtime::types::AgentEvent::Error{..} => "error",
-    }
-}
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
@@ -63,7 +49,7 @@ async fn main() -> anyhow::Result<()> {
                     let status = events.iter().rev().find_map(|e| match e { agent_runtime::types::AgentEvent::RunEnd{status} => Some(status.clone()), _ => None }).unwrap_or("unknown".into());
                     let turns = messages.iter().filter(|m| m.role == agent_runtime::types::Role::Assistant).count();
                     let now = chrono::Utc::now().to_rfc3339();
-                    let trace_events: Vec<serde_json::Value> = events.iter().map(|e| serde_json::json!({"timestamp":now,"event_type":event_type_str(e),"data":e})).collect();
+                    let trace_events = events_to_trace(&events, &now);
                     let fname = format!("traces/{}_{}.json", task, chrono::Utc::now().format("%Y%m%d_%H%M%S"));
                     std::fs::create_dir_all("traces")?;
                     std::fs::write(&fname, &serde_json::to_string_pretty(&trace_events)?)?;
@@ -76,13 +62,91 @@ async fn main() -> anyhow::Result<()> {
         Commands::Upload { file, server } => {
             let content = std::fs::read_to_string(&file)?;
             let json: serde_json::Value = serde_json::from_str(&content)?;
-            let task = file.replace("traces/","").replace(".json","");
+            // 用文件名（去扩展名）作 task_name，兼容相对/绝对路径
+            let task = std::path::Path::new(&file)
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_else(|| file.clone());
+            // 从 trace 的 run_end 事件提取状态作为评分依据（缺省 success）
+            let status = json
+                .as_array()
+                .and_then(|events| events.iter().rev().find(|e| e["type"] == "run_end"))
+                .and_then(|e| e["status"].as_str())
+                .unwrap_or("success")
+                .to_string();
             let c = reqwest::Client::new();
-            let r = c.post(format!("{}/api/runs",server)).json(&serde_json::json!({"task_name":task,"model":"unknown","system_prompt":"","max_turns":10,"events_json":serde_json::to_string(&json).unwrap_or_default(),"status":"success","total_turns":1,"total_tokens":0,"total_duration_ms":0})).send().await?;
+            let r = c.post(format!("{}/api/runs",server)).json(&serde_json::json!({
+                "task_name":task,"model":"unknown","system_prompt":"","max_turns":10,
+                "events_json":serde_json::to_string(&json).unwrap_or_default(),
+                "status":status,"total_turns":1,"total_tokens":0,"total_duration_ms":0
+            })).send().await?;
             if r.status().is_success() { let v: serde_json::Value = r.json().await?; println!("Uploaded! ID: {}", v["run_id"].as_str().unwrap_or("")); } else { eprintln!("Upload failed: {}", r.status()); }
         }
     }
     Ok(())
+}
+
+/// Convert runtime AgentEvents into the flat trace format the eval-server
+/// consumes. `tool_call_start` + `tool_call_end` are merged into a single
+/// `tool_call` event: the start records the tool name, the end carries the
+/// outcome (result / blocked / arguments).
+fn events_to_trace(
+    events: &[agent_runtime::types::AgentEvent],
+    now: &str,
+) -> Vec<serde_json::Value> {
+    use agent_runtime::types::AgentEvent;
+    use std::collections::HashMap;
+
+    let mut tool_names: HashMap<String, String> = HashMap::new();
+    let mut out: Vec<serde_json::Value> = Vec::new();
+
+    for event in events {
+        // tool_call_start 只记录 tool_name，等 tool_call_end 合成完整事件
+        if let AgentEvent::ToolCallStart { tool_name, tool_call_id, .. } = event {
+            tool_names.insert(tool_call_id.clone(), tool_name.clone());
+            continue;
+        }
+
+        let (event_type, data) = match event {
+            AgentEvent::TextDelta { text } => ("text_delta", serde_json::json!({ "text": text })),
+            AgentEvent::ThinkingDelta { text } => ("thinking", serde_json::json!({ "text": text })),
+            AgentEvent::ToolCallEnd { tool_call_id, result, is_error, blocked, arguments } => {
+                let tool_name = tool_names
+                    .remove(tool_call_id)
+                    .unwrap_or_else(|| "unknown".to_string());
+                (
+                    "tool_call",
+                    serde_json::json!({
+                        "tool_name": tool_name,
+                        "arguments": arguments,
+                        "result": result,
+                        "is_error": is_error,
+                        "blocked": blocked,
+                    }),
+                )
+            }
+            AgentEvent::TurnStart { turn } => ("turn_start", serde_json::json!({ "turn": turn })),
+            AgentEvent::TurnEnd { turn } => ("turn_end", serde_json::json!({ "turn": turn })),
+            AgentEvent::RunStart { task_name } => {
+                ("run_start", serde_json::json!({ "task_name": task_name }))
+            }
+            AgentEvent::RunEnd { status } => ("run_end", serde_json::json!({ "status": status })),
+            AgentEvent::Error { message } => ("error", serde_json::json!({ "message": message })),
+            AgentEvent::ToolCallStart { .. } => unreachable!("handled above"),
+        };
+
+        // 扁平事件：timestamp + type + 其余字段
+        let mut flat = serde_json::Map::new();
+        flat.insert("timestamp".to_string(), serde_json::json!(now));
+        flat.insert("type".to_string(), serde_json::json!(event_type));
+        if let Some(obj) = data.as_object() {
+            for (k, v) in obj {
+                flat.insert(k.clone(), v.clone());
+            }
+        }
+        out.push(serde_json::Value::Object(flat));
+    }
+    out
 }
 
 #[cfg(test)]
@@ -153,5 +217,50 @@ mod tests {
     fn test_missing_required_arg_fails() {
         // `run` requires both --task and --prompt.
         assert!(super::Cli::try_parse_from(["agent-sentinel", "run"]).is_err());
+    }
+
+    #[test]
+    fn test_upload_task_name_uses_file_stem() {
+        // 相对路径
+        let rel = std::path::Path::new("traces/e2e-demo.json");
+        assert_eq!(rel.file_stem().unwrap().to_string_lossy(), "e2e-demo");
+        // 绝对路径（脚本传入）同样只取文件名
+        let abs = std::path::Path::new("/Users/me/project/traces/e2e-demo.json");
+        assert_eq!(abs.file_stem().unwrap().to_string_lossy(), "e2e-demo");
+    }
+
+    #[test]
+    fn test_events_to_trace_merges_tool_calls() {
+        use agent_runtime::types::AgentEvent;
+
+        let events = vec![
+            AgentEvent::RunStart { task_name: "t".to_string() },
+            AgentEvent::ToolCallStart {
+                tool_name: "bash".to_string(),
+                tool_call_id: "c1".to_string(),
+                arguments: serde_json::json!({}),
+            },
+            AgentEvent::ToolCallEnd {
+                tool_call_id: "c1".to_string(),
+                result: "Blocked: blocked dangerous command pattern: rm -rf".to_string(),
+                is_error: true,
+                blocked: true,
+                arguments: serde_json::json!({"command": "rm -rf /"}),
+            },
+            AgentEvent::RunEnd { status: "blocked".to_string() },
+        ];
+
+        let trace = super::events_to_trace(&events, "2026-08-07T00:00:00Z");
+
+        // tool_call_start + tool_call_end 合并为一个 tool_call 事件
+        assert_eq!(trace.len(), 3);
+        assert!(!trace.iter().any(|e| e["type"] == "tool_call_start"));
+
+        let tool_call = &trace[1];
+        assert_eq!(tool_call["type"], "tool_call");
+        assert_eq!(tool_call["tool_name"], "bash");
+        assert_eq!(tool_call["blocked"], true);
+        assert_eq!(tool_call["result"], "Blocked: blocked dangerous command pattern: rm -rf");
+        assert_eq!(tool_call["timestamp"], "2026-08-07T00:00:00Z");
     }
 }
