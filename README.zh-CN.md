@@ -48,6 +48,8 @@ cli/             CLI：run + upload
 patterns.json    危险模式库（单一数据源，跨语言共享）
 ```
 
+深入设计、数据流与模块职责见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+
 ## 快速开始
 
 ### 🐍 Python 演示 —— 无需 API key，最快看到闭环

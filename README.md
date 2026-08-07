@@ -48,6 +48,8 @@ cli/             CLI: run + upload
 patterns.json    danger-pattern library (single source of truth, shared across languages)
 ```
 
+For a deep dive into the design, data flow, and module responsibilities, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ## Quick start
 
 ### 🐍 Python demo — no API key needed, see the loop fastest
