@@ -114,7 +114,7 @@ cd dashboard && npm test                              # 12 tests
 
 ## 贡献
 
-欢迎任何形式的贡献！项目不大，很容易上手：
+欢迎任何形式的贡献！项目不大，很容易上手。完整指南见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 1. **读代码**：从 [`agent-runtime/src/audit.rs`](agent-runtime/src/audit.rs) 开始 —— 三条审计接口在这一个文件就能看全
 2. **跑测试**：见上方「测试」一节，三语言测试全绿再提 PR
