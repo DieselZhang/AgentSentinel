@@ -127,3 +127,114 @@ describe('RunCard', () => {
     expect(router.currentRoute.value.path).toBe('/runs/run-123')
   })
 })
+
+describe('SafetyScore edge cases', () => {
+  it('labels exactly 80 as Safe', () => {
+    const wrapper = mount(SafetyScore, { props: { score: 80 } })
+    expect(wrapper.find('.score-label').text()).toBe('Safe')
+  })
+
+  it('labels 79 and 50 as Caution, 49 as Risk', () => {
+    expect(mount(SafetyScore, { props: { score: 79 } }).find('.score-label').text()).toBe('Caution')
+    expect(mount(SafetyScore, { props: { score: 50 } }).find('.score-label').text()).toBe('Caution')
+    expect(mount(SafetyScore, { props: { score: 49 } }).find('.score-label').text()).toBe('Risk')
+  })
+
+  it('clamps out-of-range scores for label', () => {
+    expect(mount(SafetyScore, { props: { score: 150 } }).find('.score-label').text()).toBe('Safe')
+    expect(mount(SafetyScore, { props: { score: -10 } }).find('.score-label').text()).toBe('Risk')
+  })
+
+  it('picks ring color per band', () => {
+    expect(mount(SafetyScore, { props: { score: 90 } }).find('.score-ring').attributes('stroke')).toBe('#3fb950')
+    expect(mount(SafetyScore, { props: { score: 60 } }).find('.score-ring').attributes('stroke')).toBe('#d29922')
+    expect(mount(SafetyScore, { props: { score: 20 } }).find('.score-ring').attributes('stroke')).toBe('#f85149')
+  })
+})
+
+describe('Timeline highlighting', () => {
+  const base: ToolCallRecord = {
+    tool_name: 'bash',
+    arguments: {},
+    result: '',
+    blocked: false,
+    is_error: false,
+    timestamp: '2026-07-31T12:00:00Z',
+  }
+
+  it('applies highlighted class only to indexed calls', () => {
+    const calls = [base, { ...base, tool_name: 'read_file' }]
+    const wrapper = mount(Timeline, {
+      props: { toolCalls: calls, highlightIndexes: [1] },
+    })
+    const contents = wrapper.findAll('.timeline-content')
+    expect(contents[0].classes()).not.toContain('highlighted')
+    expect(contents[1].classes()).toContain('highlighted')
+  })
+
+  it('shows error badge for error calls', () => {
+    const wrapper = mount(Timeline, {
+      props: { toolCalls: [{ ...base, is_error: true }] },
+    })
+    expect(wrapper.find('.badge-error').text()).toBe('error')
+  })
+})
+
+describe('RunCard state variants', () => {
+  const baseRun: RunSummary = {
+    run_id: 'r1',
+    task_name: 't',
+    created_at: '2026-07-31T10:00:00Z',
+    model: 'm',
+    status: 'failed',
+    safety_score: 40,
+    total_turns: 2,
+    total_duration_ms: 1500,
+  }
+
+  function makeRouter(): Router {
+    return createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/', name: 'home', component: { template: '<div />' } },
+        { path: '/runs/:id', name: 'run-detail', component: { template: '<div />' } },
+      ],
+    })
+  }
+
+  async function mountCardWith(run: RunSummary) {
+    const router = makeRouter()
+    const wrapper = mount(RunCard, { props: { run }, global: { plugins: [router] } })
+    await router.push('/')
+    await router.isReady()
+    return wrapper
+  }
+
+  it('maps failed and blocked to badge-failed', async () => {
+    for (const status of ['failed', 'blocked']) {
+      const wrapper = await mountCardWith({ ...baseRun, status })
+      expect(wrapper.find('.status-badge').classes()).toContain('badge-failed')
+    }
+  })
+
+  it('maps timeout to badge-timeout', async () => {
+    const wrapper = await mountCardWith({ ...baseRun, status: 'timeout' })
+    expect(wrapper.find('.status-badge').classes()).toContain('badge-timeout')
+  })
+
+  it('applies score-risk chip for low score and score-safe for high score', async () => {
+    const risk = await mountCardWith(baseRun)
+    expect(risk.find('.score-chip').classes()).toContain('score-risk')
+
+    const safe = await mountCardWith({ ...baseRun, safety_score: 90 })
+    expect(safe.find('.score-chip').classes()).toContain('score-safe')
+  })
+
+  it('formats duration as seconds and minutes', async () => {
+    const sec = await mountCardWith({ ...baseRun, total_duration_ms: 1500 })
+    expect(sec.text()).toContain('1.5s')
+
+    const min = await mountCardWith({ ...baseRun, total_duration_ms: 90000 })
+    expect(min.text()).toContain('1m 30s')
+  })
+})
