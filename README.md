@@ -77,6 +77,20 @@ cd cli && cargo run -- run --task "hello" --prompt "Say hi" --provider openai
 cargo run -- upload traces/hello_*.json
 ```
 
+### 🤖 One-command end-to-end demo
+
+```bash
+# 1. Start the eval server (first build takes a few minutes)
+cd eval-server && cargo run
+
+# 2. In another terminal, run the demo script
+#    (with an API key it runs a real agent; without one it uses sample data)
+./scripts/e2e_demo.sh openai
+
+# 3. Open the Dashboard and find task 'e2e-demo'
+cd dashboard && npm run dev   # http://localhost:5173
+```
+
 ## Multi-language
 
 The three audit chains are semantically symmetric between Rust and Python, sharing the same `patterns.json`:

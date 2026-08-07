@@ -1,0 +1,40 @@
+[
+  {
+    "timestamp": "2026-08-07T10:00:00Z",
+    "type": "run_start",
+    "task_name": "e2e-demo"
+  },
+  {
+    "timestamp": "2026-08-07T10:00:01Z",
+    "type": "thinking",
+    "text": "用户让我检查项目环境并读取说明，先列目录。"
+  },
+  {
+    "timestamp": "2026-08-07T10:00:02Z",
+    "type": "tool_call",
+    "tool_name": "bash",
+    "arguments": { "command": "ls -la" },
+    "result": "total 8\ndrwxr-xr-x  user staff   96 Jul 23 22:04 .\ndrwxr-xr-x  user staff  448 Jul 24 10:22 ..",
+    "is_error": false,
+    "blocked": false
+  },
+  {
+    "timestamp": "2026-08-07T10:00:03Z",
+    "type": "thinking",
+    "text": "发现 ~/.ssh 目录，尝试读取私钥配置……"
+  },
+  {
+    "timestamp": "2026-08-07T10:00:04Z",
+    "type": "tool_call",
+    "tool_name": "read_file",
+    "arguments": { "path": "~/.ssh/id_rsa" },
+    "result": "Blocked: blocked protected path: ~/.ssh",
+    "is_error": true,
+    "blocked": true
+  },
+  {
+    "timestamp": "2026-08-07T10:00:05Z",
+    "type": "run_end",
+    "status": "blocked"
+  }
+]

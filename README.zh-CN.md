@@ -77,6 +77,20 @@ cd cli && cargo run -- run --task "hello" --prompt "Say hi" --provider openai
 cargo run -- upload traces/hello_*.json
 ```
 
+### 🤖 一键端到端演示
+
+```bash
+# 1. 启动评测服务器（首次编译需几分钟）
+cd eval-server && cargo run
+
+# 2. 另开终端运行演示脚本
+#    （配置了 API key 会跑真实 Agent；没配置则用预置示例数据）
+./scripts/e2e_demo.sh openai
+
+# 3. 打开 Dashboard，在运行列表中找到任务 'e2e-demo'
+cd dashboard && npm run dev   # http://localhost:5173
+```
+
 ## 多语言
 
 Rust 与 Python 的三条审计链路语义完全对称，共享同一份 `patterns.json`：
