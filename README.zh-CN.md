@@ -6,7 +6,7 @@
 
 评测的是 agent 的**执行过程**（是否危险、是否完成、是否高效），不是模型的答案。
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) · Rust · Vue 3 · SQLite · Python · 🌐 [English](README.md) | 简体中文
+[![CI](https://github.com/DieselZhang/AgentSentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/DieselZhang/AgentSentinel/actions/workflows/ci.yml) · [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) · Rust · Vue 3 · SQLite · Python · 🌐 [English](README.md) | 简体中文
 
 ---
 

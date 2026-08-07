@@ -6,7 +6,7 @@ A from-scratch Rust Agent runtime + behavior safety scoring platform, with a sem
 
 It evaluates the agent's **execution process** (is it dangerous, did it complete, was it efficient) — not the model's answers.
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) · Rust · Vue 3 · SQLite · Python · 🌐 English | [简体中文](README.zh-CN.md)
+[![CI](https://github.com/DieselZhang/AgentSentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/DieselZhang/AgentSentinel/actions/workflows/ci.yml) · [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) · Rust · Vue 3 · SQLite · Python · 🌐 English | [简体中文](README.zh-CN.md)
 
 ---
 
