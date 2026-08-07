@@ -114,7 +114,7 @@ cd dashboard && npm test                              # 12 tests
 
 ## Contributing
 
-Any form of contribution is welcome! The project is small and easy to get started with:
+Any form of contribution is welcome! The project is small and easy to get started with. Full guide in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 1. **Read the code**: start from [`agent-runtime/src/audit.rs`](agent-runtime/src/audit.rs) — the three audit interfaces are visible in one file
 2. **Run the tests**: see "Testing" above; get all three languages green before opening a PR
