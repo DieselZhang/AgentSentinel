@@ -1,0 +1,62 @@
+name: CI
+
+# 触发时机：推送到 main，或向 main 提交 PR
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ---- Rust：三个 crate 的单元 + 集成测试 ----
+  rust:
+    name: Rust tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Test agent-runtime
+        run: cargo test --manifest-path agent-runtime/Cargo.toml
+      - name: Test eval-server
+        run: cargo test --manifest-path eval-server/Cargo.toml
+      - name: Test cli
+        run: cargo test --manifest-path cli/Cargo.toml
+
+  # ---- Python：审计 SDK 测试 ----
+  python:
+    name: Python SDK tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: python-sdk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pytest
+        run: pip install pytest
+      - name: Run tests
+        run: python -m pytest
+
+  # ---- Dashboard：组件测试 + 生产构建 ----
+  dashboard:
+    name: Dashboard tests & build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests
+        run: npm test
+      - name: Build
+        run: npm run build
