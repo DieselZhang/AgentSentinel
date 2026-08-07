@@ -1,71 +1,131 @@
 # AgentSentinel
 
-从零实现的 Rust Agent 运行时 + Vue 3 评测 Dashboard。
+> **Agent behavior security audit layer — See, Block, Review.**
 
-> **定位：Agent 行为安全审计层 —— 能看见、能阻止、能复盘。**
-> 评测的是 agent 的**执行过程**（是否危险、是否完成、是否高效），不是模型的答案。
+A from-scratch Rust Agent runtime + behavior safety scoring platform, with a semantically symmetric Python audit SDK.
 
-## 为什么是 AgentSentinel（差异化定位）
+It evaluates the agent's **execution process** (is it dangerous, did it complete, was it efficient) — not the model's answers.
 
-主流开源生态把「编排、观测、防护、评测」拆成四个互相独立的工具（LangGraph / Langfuse / garak / OpenAI Evals），彼此靠集成拼起来。**AgentSentinel 是唯一把「动作级权限拦截 + 行为安全评分 + trace 可视化」在运行时内部做成端到端闭环的项目**，且为 Rust 从零手写、不依赖任何框架：
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) · Rust · Vue 3 · SQLite · Python · 🌐 English | [简体中文](README.zh-CN.md)
 
-- **看见**：完整 trace 时间线（thinking / tool call / blocked 事件）
-- **阻止**：PermissionPolicy 在 tool 执行前做 Allow/AskUser/Deny 裁决，`DenyDangerous` 默认拦截危险命令与敏感路径
-- **复盘**：多维加权安全评分（danger 40% / completion 30% / efficiency 20% / stability 10%）+ 运行对比 + SafetyAlert 定位到具体事件
-- **拦截即证据、评分即验证**：危险命令模式库同时供运行时拦截与事后评分使用，单一来源不漂移
+---
 
-## 架构
+## Why
+
+People who run agents fear two things:
+
+- **It goes rogue** — a single prompt can make an agent run `rm -rf` or touch `/etc/passwd`
+- **It's a black box** — no structured record, nothing to trace back or prove safety
+
+The mainstream open-source ecosystem splits "orchestration, observability, guardrails, evaluation" into four separate tools (LangGraph / Langfuse / garak / OpenAI Evals) that you glue together. **AgentSentinel is the only project that closes the loop end-to-end inside the runtime: action-level permission blocking + behavior safety scoring + trace visualization** — written from scratch in Rust, with no framework dependency.
+
+## What it does
+
+| Capability | Description |
+| ------ | ------ |
+| 🔍 **See** | Full trace timeline: thinking, tool calls, blocked events — nothing is lost |
+| 🛡️ **Block** | `PermissionPolicy` decides Allow / AskUser / Deny *before* a tool runs; dangerous commands and sensitive paths never actually execute |
+| 📊 **Review** | Four-dimension weighted safety score (danger 40% / completion 30% / efficiency 20% / stability 10%) + alerts pinpointed to concrete events + run comparison |
+
+## How it works
+
+Three audit chains, three pluggable interfaces, all defined in `agent-runtime`:
+
+| Chain | Interface | Phase | Role |
+| ------ | ------ | ------ | ------ |
+| Observability | `TraceEmitter` | during run | record behavior events |
+| Permission | `PermissionPolicy` | before a tool runs | decide tool permission |
+| Safety scoring | `SafetyScorer` | after run | judge safety |
+
+All three interfaces share the danger-pattern library [`patterns.json`](patterns.json) as a **single source of truth**: `PermissionPolicy` uses it to block at runtime, `SafetyScorer` uses it to score afterwards — **blocking is evidence, scoring is verification**. Change one file, and no language implementation ever drifts.
 
 ```text
-agent-runtime/    # Agent loop + tool calling + policy + streaming
-eval-server/      # axum + SQLite + 评分引擎
-dashboard/        # Vue 3 + Pinia + Chart.js
-cli/              # CLI: run + upload
+agent-runtime/   Rust agent loop + tool calling + three audit interfaces + streaming providers
+eval-server/     axum + SQLite + scoring engine (RuleBasedSafetyScorer)
+dashboard/       Vue 3 eval dashboard (score / compare / trace replay / JSON upload)
+python-sdk/      Python three audit interfaces (semantically symmetric with Rust)
+cli/             CLI: run + upload
+patterns.json    danger-pattern library (single source of truth, shared across languages)
 ```
 
-### 审计接口族（三条链路，三个可插拔接口）
+## Quick start
 
-所有审计能力统一收敛为 agent-runtime 暴露的三个 trait，实现方（如 eval-server）可自由替换：
-
-| 链路 | 接口 | 阶段 | 职责 |
-| ------ | ------ | ------ | ------ |
-| 可观测 | `TraceEmitter` | run 中 | 行为事件流记录 |
-| 权限控制 | `PermissionPolicy` | run 前 | tool 权限裁决（Allow/AskUser/Deny） |
-| 安全评分 | `SafetyScorer` | run 后 | 安全评分判定（0-100 + 告警） |
-
-三个接口共享危险模式库（`DANGEROUS_COMMAND_PATTERNS` / `SENSITIVE_PATHS`）：`PermissionPolicy` 用它在运行时拦截，`SafetyScorer` 用它在事后评分——**拦截即证据、评分即验证**。评分引擎以 `RuleBasedSafetyScorer` 实现 `SafetyScorer`，通过 `AppState` 注入 eval-server。
-
-## 快速开始
+### 🐍 Python demo — no API key needed, see the loop fastest
 
 ```bash
-# 1. 启动评测服务器
-cd eval-server && cargo run     # http://127.0.0.1:3001
+cd python-sdk && python examples/demo_audit_loop.py
+```
 
-# 2. 启动 Dashboard
-cd dashboard && npm install && npm run dev  # http://localhost:5173
+Simulates two agent runs: the dangerous agent's `rm -rf` is blocked by the permission layer, scored 57/100 with CRITICAL alerts; the safe agent scores full marks.
 
-# 3. 运行 Agent（provider：anthropic 默认 / deepseek / openai）
+### 🦀 Rust full stack — real agent + Dashboard
+
+```bash
+# 1. Start the eval server
+cd eval-server && cargo run        # http://127.0.0.1:3001
+
+# 2. Start the Dashboard
+cd dashboard && npm install && npm run dev   # http://localhost:5173
+
+# 3. Run an agent (provider: anthropic default / deepseek / openai)
 export ANTHROPIC_API_KEY="sk-ant-..."
 cd cli && cargo run -- run --task "hello" --prompt "Say hi" --provider openai
 
-# 4. 上传 Trace
+# 4. Upload the trace to the Dashboard
 cargo run -- upload traces/hello_*.json
 ```
 
-## 技术栈
+## Multi-language
 
-Rust (tokio, axum, rusqlite, reqwest, clap) · Vue 3 (Pinia, Vue Router, Vite, TypeScript) · SQLite
+The three audit chains are semantically symmetric between Rust and Python, sharing the same `patterns.json`:
 
-## 测试
+| Chain | Rust (agent-runtime) | Python (python-sdk) |
+| ------ | ------ | ------ |
+| Observability | `trace::TraceEmitter` | `agent_sentinel.trace.TraceEmitter` |
+| Permission | `policy::PermissionPolicy` | `agent_sentinel.permission.PermissionPolicy` |
+| Safety scoring | `scorer::SafetyScorer` | `agent_sentinel.scoring.SafetyScorer` |
+
+Python ecosystems (LangChain / LangGraph / smolagents, ...) can adopt the audit layer directly — no pyO3 bindings needed.
+
+## Tech stack
+
+Rust (tokio, axum, rusqlite, reqwest, clap) · Vue 3 (Pinia, Vue Router, Vite, TypeScript) · SQLite · Python (stdlib + pytest)
+
+## Testing
 
 ```bash
 cargo test --manifest-path agent-runtime/Cargo.toml   # 7 tests
 cargo test --manifest-path eval-server/Cargo.toml     # 17 tests (12 unit + 5 integration)
-cargo test --manifest-path cli/Cargo.toml             # 3 tests
+cargo test --manifest-path cli/Cargo.toml             # 4 tests
+cd python-sdk && python -m pytest                     # 20 tests
 cd dashboard && npm test                              # 12 tests
-cd dashboard && npm run build                          # 0 errors
 ```
 
-## 简历
+**60 tests** in total (incl. axum integration tests), driven by mocks injected at trait / ABC boundaries — no real LLM API required, fully repeatable.
 
-> AgentSentinel — 从零实现的 Rust Agent 运行时 + Agent 行为安全审计平台。核心闭环「能看见、能阻止、能复盘」：PermissionPolicy（Allow/AskUser/Deny）在 tool 执行前拦截危险命令与敏感路径；完整 trace 事件流记录每一次思考与工具调用；基于共享危险模式库的多维安全评分引擎（danger/completion/efficiency/stability 加权）对运行做可解释打分。自研 agent loop + 流式 provider（Anthropic/DeepSeek/OpenAI）。Rust + Vue 3 + SQLite。
+## Roadmap
+
+- [ ] Custom safety rules (YAML/TOML config for team-specific policies)
+- [ ] Stability scoring (run-to-run consistency of the same task)
+- [ ] Docker sandboxed execution
+- [ ] CI/CD integration as an agent regression gate
+- [ ] OpenTelemetry GenAI semantic-convention export for interop
+- [ ] More LLM providers (Gemini / local models)
+
+## Contributing
+
+Any form of contribution is welcome! The project is small and easy to get started with:
+
+1. **Read the code**: start from [`agent-runtime/src/audit.rs`](agent-runtime/src/audit.rs) — the three audit interfaces are visible in one file
+2. **Run the tests**: see "Testing" above; get all three languages green before opening a PR
+3. **Open a PR**: every change goes feature-branch → PR → squash merge → delete branch
+
+Good starting points:
+
+- Add a danger-pattern variant (e.g. `rm -r -f` bypass) to `patterns.json` + tests
+- Add filtering / stats to the Dashboard
+- Write a Python example wiring the SDK into LangGraph
+
+## License
+
+[MIT](LICENSE)
