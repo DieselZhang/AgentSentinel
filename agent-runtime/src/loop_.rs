@@ -142,18 +142,23 @@ pub async fn run_agent(
                             result: format!("Blocked: {}", reason),
                             is_error: true,
                             blocked: true,
+                            // 未实际执行工具，耗时记 0
+                            duration_ms: 0,
                             arguments: tc.arguments.clone(),
                         };
                         config.tracer.emit(event.clone());
                         events.push(event);
                         (true, format!("Blocked: {}", reason), true)
                     } else {
+                        let started_at = std::time::Instant::now();
                         let result = t.execute(&tc.arguments).await;
+                        let duration_ms = started_at.elapsed().as_millis() as u64;
                         let event = AgentEvent::ToolCallEnd {
                             tool_call_id: tc.id.clone(),
                             result: result.content.clone(),
                             is_error: result.is_error,
                             blocked: false,
+                            duration_ms,
                             arguments: tc.arguments.clone(),
                         };
                         config.tracer.emit(event.clone());
@@ -168,6 +173,8 @@ pub async fn run_agent(
                         result: msg.clone(),
                         is_error: true,
                         blocked: false,
+                        // 未知工具未执行，耗时记 0
+                        duration_ms: 0,
                         arguments: tc.arguments.clone(),
                     };
                     config.tracer.emit(event.clone());

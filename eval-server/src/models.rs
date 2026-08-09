@@ -24,6 +24,9 @@ pub struct ToolCallRecord {
     pub blocked: bool,
     pub is_error: bool,
     pub timestamp: String,
+    /// Tool execution time in ms; absent for old traces (serde default).
+    #[serde(default)]
+    pub duration_ms: Option<u64>,
 }
 
 /// Re-exported from agent-runtime: part of the audit interface family

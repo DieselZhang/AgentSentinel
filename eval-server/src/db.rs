@@ -262,6 +262,9 @@ fn extract_tool_calls(events_json: &str) -> Vec<ToolCallRecord> {
                 .unwrap_or("")
                 .to_string();
 
+            // 旧 trace 无 duration_ms 时保持 None，前端不显示耗时
+            let duration_ms = event.get("duration_ms").and_then(|v| v.as_u64());
+
             Some(ToolCallRecord {
                 tool_name,
                 arguments,
@@ -269,6 +272,7 @@ fn extract_tool_calls(events_json: &str) -> Vec<ToolCallRecord> {
                 blocked,
                 is_error,
                 timestamp,
+                duration_ms,
             })
         })
         .collect()

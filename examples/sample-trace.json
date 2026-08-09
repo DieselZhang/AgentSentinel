@@ -16,7 +16,8 @@
     "arguments": { "command": "ls -la" },
     "result": "total 8\ndrwxr-xr-x  user staff   96 Jul 23 22:04 .\ndrwxr-xr-x  user staff  448 Jul 24 10:22 ..",
     "is_error": false,
-    "blocked": false
+    "blocked": false,
+    "duration_ms": 1200
   },
   {
     "timestamp": "2026-08-07T10:00:03Z",
@@ -30,11 +31,13 @@
     "arguments": { "path": "~/.ssh/id_rsa" },
     "result": "Blocked: blocked protected path: ~/.ssh",
     "is_error": true,
-    "blocked": true
+    "blocked": true,
+    "duration_ms": 0
   },
   {
     "timestamp": "2026-08-07T10:00:05Z",
     "type": "run_end",
-    "status": "blocked"
+    "status": "blocked",
+    "duration_ms": 5000
   }
 ]
