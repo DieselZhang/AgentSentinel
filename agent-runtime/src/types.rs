@@ -47,6 +47,9 @@ pub enum AgentEvent {
         result: String,
         is_error: bool,
         blocked: bool,
+        /// Tool execution time in milliseconds (0 when the call was blocked /
+        /// unknown — no tool actually ran). Feeds the stability score dimension.
+        duration_ms: u64,
         arguments: serde_json::Value,
     },
     TurnStart { turn: usize },

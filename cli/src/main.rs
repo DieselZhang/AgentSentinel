@@ -49,11 +49,13 @@ async fn main() -> anyhow::Result<()> {
                     let status = events.iter().rev().find_map(|e| match e { agent_runtime::types::AgentEvent::RunEnd{status} => Some(status.clone()), _ => None }).unwrap_or("unknown".into());
                     let turns = messages.iter().filter(|m| m.role == agent_runtime::types::Role::Assistant).count();
                     let now = chrono::Utc::now().to_rfc3339();
-                    let trace_events = events_to_trace(&events, &now);
+                    // 真实总耗时：写入 trace 的 run_end 事件，upload 时供评分使用
+                    let duration_ms = start.elapsed().as_millis() as u64;
+                    let trace_events = events_to_trace(&events, &now, duration_ms);
                     let fname = format!("traces/{}_{}.json", task, chrono::Utc::now().format("%Y%m%d_%H%M%S"));
                     std::fs::create_dir_all("traces")?;
                     std::fs::write(&fname, &serde_json::to_string_pretty(&trace_events)?)?;
-                    println!("Status: {}, Turns: {}, Duration: {}ms", status, turns, start.elapsed().as_millis());
+                    println!("Status: {}, Turns: {}, Duration: {}ms", status, turns, duration_ms);
                     println!("Trace: {}", fname);
                 }
                 Err(e) => eprintln!("Failed: {}", e),
@@ -74,11 +76,17 @@ async fn main() -> anyhow::Result<()> {
                 .and_then(|e| e["status"].as_str())
                 .unwrap_or("success")
                 .to_string();
+            // 从 run_end 事件读取 cli run 时写入的真实总耗时（缺省 0，旧 trace 兼容）
+            let total_duration_ms = json
+                .as_array()
+                .and_then(|events| events.iter().rev().find(|e| e["type"] == "run_end"))
+                .and_then(|e| e["duration_ms"].as_u64())
+                .unwrap_or(0);
             let c = reqwest::Client::new();
             let r = c.post(format!("{}/api/runs",server)).json(&serde_json::json!({
                 "task_name":task,"model":"unknown","system_prompt":"","max_turns":10,
                 "events_json":serde_json::to_string(&json).unwrap_or_default(),
-                "status":status,"total_turns":1,"total_tokens":0,"total_duration_ms":0
+                "status":status,"total_turns":1,"total_tokens":0,"total_duration_ms":total_duration_ms
             })).send().await?;
             if r.status().is_success() { let v: serde_json::Value = r.json().await?; println!("Uploaded! ID: {}", v["run_id"].as_str().unwrap_or("")); } else { eprintln!("Upload failed: {}", r.status()); }
         }
@@ -93,6 +101,7 @@ async fn main() -> anyhow::Result<()> {
 fn events_to_trace(
     events: &[agent_runtime::types::AgentEvent],
     now: &str,
+    total_duration_ms: u64,
 ) -> Vec<serde_json::Value> {
     use agent_runtime::types::AgentEvent;
     use std::collections::HashMap;
@@ -110,7 +119,7 @@ fn events_to_trace(
         let (event_type, data) = match event {
             AgentEvent::TextDelta { text } => ("text_delta", serde_json::json!({ "text": text })),
             AgentEvent::ThinkingDelta { text } => ("thinking", serde_json::json!({ "text": text })),
-            AgentEvent::ToolCallEnd { tool_call_id, result, is_error, blocked, arguments } => {
+            AgentEvent::ToolCallEnd { tool_call_id, result, is_error, blocked, duration_ms, arguments } => {
                 let tool_name = tool_names
                     .remove(tool_call_id)
                     .unwrap_or_else(|| "unknown".to_string());
@@ -122,6 +131,7 @@ fn events_to_trace(
                         "result": result,
                         "is_error": is_error,
                         "blocked": blocked,
+                        "duration_ms": duration_ms,
                     }),
                 )
             }
@@ -130,7 +140,10 @@ fn events_to_trace(
             AgentEvent::RunStart { task_name } => {
                 ("run_start", serde_json::json!({ "task_name": task_name }))
             }
-            AgentEvent::RunEnd { status } => ("run_end", serde_json::json!({ "status": status })),
+            AgentEvent::RunEnd { status } => (
+                "run_end",
+                serde_json::json!({ "status": status, "duration_ms": total_duration_ms }),
+            ),
             AgentEvent::Error { message } => ("error", serde_json::json!({ "message": message })),
             AgentEvent::ToolCallStart { .. } => unreachable!("handled above"),
         };
@@ -245,12 +258,13 @@ mod tests {
                 result: "Blocked: blocked dangerous command pattern: rm -rf".to_string(),
                 is_error: true,
                 blocked: true,
+                duration_ms: 0,
                 arguments: serde_json::json!({"command": "rm -rf /"}),
             },
             AgentEvent::RunEnd { status: "blocked".to_string() },
         ];
 
-        let trace = super::events_to_trace(&events, "2026-08-07T00:00:00Z");
+        let trace = super::events_to_trace(&events, "2026-08-07T00:00:00Z", 1234);
 
         // tool_call_start + tool_call_end 合并为一个 tool_call 事件
         assert_eq!(trace.len(), 3);
@@ -260,7 +274,13 @@ mod tests {
         assert_eq!(tool_call["type"], "tool_call");
         assert_eq!(tool_call["tool_name"], "bash");
         assert_eq!(tool_call["blocked"], true);
+        assert_eq!(tool_call["duration_ms"], 0);
         assert_eq!(tool_call["result"], "Blocked: blocked dangerous command pattern: rm -rf");
         assert_eq!(tool_call["timestamp"], "2026-08-07T00:00:00Z");
+
+        // run_end 事件携带 CLI 层写入的真实总耗时（修复 total_duration_ms 硬编码）
+        let run_end = &trace[2];
+        assert_eq!(run_end["type"], "run_end");
+        assert_eq!(run_end["duration_ms"], 1234);
     }
 }

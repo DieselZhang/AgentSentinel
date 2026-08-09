@@ -36,6 +36,7 @@ describe('Timeline', () => {
     blocked: false,
     is_error: false,
     timestamp: '2026-07-31T12:00:00Z',
+    duration_ms: 1500,
   }
 
   it('shows empty message when no tool calls', () => {
@@ -46,6 +47,32 @@ describe('Timeline', () => {
   it('renders tool names for each call', () => {
     const wrapper = mount(Timeline, { props: { toolCalls: [toolCall] } })
     expect(wrapper.find('.tool-name').text()).toBe('web_search')
+  })
+
+  it('shows duration badge when duration_ms present', () => {
+    const wrapper = mount(Timeline, { props: { toolCalls: [toolCall] } })
+    expect(wrapper.find('.badge-duration').text()).toBe('1.5s')
+  })
+
+  it('formats long durations as minutes and seconds', () => {
+    const wrapper = mount(Timeline, {
+      props: { toolCalls: [{ ...toolCall, duration_ms: 90000 }] },
+    })
+    expect(wrapper.find('.badge-duration').text()).toBe('1m 30s')
+  })
+
+  it('omits duration badge when duration_ms missing (old trace)', () => {
+    // 旧 trace 的 tool_call 事件没有 duration_ms，不应显示耗时徽标
+    const legacy: ToolCallRecord = {
+      tool_name: 'web_search',
+      arguments: { query: 'test' },
+      result: 'found results',
+      blocked: false,
+      is_error: false,
+      timestamp: '2026-07-31T12:00:00Z',
+    }
+    const wrapper = mount(Timeline, { props: { toolCalls: [legacy] } })
+    expect(wrapper.find('.badge-duration').exists()).toBe(false)
   })
 
   it('shows blocked badge for blocked calls', () => {

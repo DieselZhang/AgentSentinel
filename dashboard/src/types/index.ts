@@ -16,6 +16,8 @@ export interface ToolCallRecord {
   blocked: boolean
   is_error: boolean
   timestamp: string
+  /** 工具执行耗时（ms）；旧 trace 可能缺失 */
+  duration_ms?: number
 }
 
 export interface SafetyAlert {

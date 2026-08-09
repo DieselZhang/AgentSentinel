@@ -25,6 +25,16 @@ function formatTime(ts: string): string {
   const d = new Date(ts)
   return d.toLocaleTimeString()
 }
+
+function formatDuration(ms?: number): string {
+  if (ms === undefined || ms === null || ms <= 0) return ''
+  if (ms < 1000) return `${ms}ms`
+  const sec = ms / 1000
+  if (sec < 60) return `${Math.round(sec * 10) / 10}s`
+  const m = Math.floor(sec / 60)
+  const s = Math.round(sec % 60)
+  return `${m}m ${s}s`
+}
 </script>
 
 <template>
@@ -46,6 +56,9 @@ function formatTime(ts: string): string {
           <div class="badges">
             <span v-if="call.blocked" class="badge badge-blocked">blocked</span>
             <span v-if="call.is_error" class="badge badge-error">error</span>
+            <span v-if="formatDuration(call.duration_ms)" class="badge badge-duration">
+              {{ formatDuration(call.duration_ms) }}
+            </span>
           </div>
           <span class="tool-time">{{ formatTime(call.timestamp) }}</span>
         </div>
@@ -156,6 +169,10 @@ function formatTime(ts: string): string {
 .badge-error {
   background: rgba(248, 81, 73, 0.15);
   color: #f85149;
+}
+.badge-duration {
+  background: rgba(88, 166, 255, 0.15);
+  color: #58a6ff;
 }
 .timeline-detail {
   margin-top: 10px;

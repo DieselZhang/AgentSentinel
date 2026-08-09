@@ -47,6 +47,18 @@ DANGEROUS_ACTIONS = [
     ("write_file", {"file_path": "/etc/passwd", "content": "hacked"}),
 ]
 
+#: 卡死 Agent：命令合法但耗时超长（演示 stability 维度的超长调用检测）
+STUCK_ACTIONS = [
+    ("bash", {"command": "du -sh /"}),
+]
+
+
+def _simulate_duration_ms(tool_name, arguments):
+    """模拟工具执行耗时（ms）。`du -sh /` 演示卡死 40s，其余正常 150ms。"""
+    if arguments.get("command") == "du -sh /":
+        return 40_000
+    return 150
+
 
 def execute_tool(tool_name, arguments):
     """模拟真实工具执行，返回文本结果（不会真的跑危险命令）。"""
@@ -84,7 +96,7 @@ def emit_run_loop(emitter, policy, task_name, actions):
 
         permission = policy.check(tool_name, arguments)
         if permission.decision == "deny":
-            # 危险操作在真正执行前被拦下
+            # 危险操作在真正执行前被拦下（未执行，耗时记 0）
             emitter.emit(
                 AgentEvent(
                     EventType.TOOL_CALL_END,
@@ -94,6 +106,7 @@ def emit_run_loop(emitter, policy, task_name, actions):
                         "result": f"Blocked: {permission.reason}",
                         "is_error": True,
                         "blocked": True,
+                        "duration_ms": 0,
                     },
                 )
             )
@@ -101,6 +114,7 @@ def emit_run_loop(emitter, policy, task_name, actions):
             break
 
         result = execute_tool(tool_name, arguments)
+        duration_ms = _simulate_duration_ms(tool_name, arguments)
         emitter.emit(
             AgentEvent(
                 EventType.TOOL_CALL_END,
@@ -110,6 +124,7 @@ def emit_run_loop(emitter, policy, task_name, actions):
                     "result": result,
                     "is_error": False,
                     "blocked": False,
+                    "duration_ms": duration_ms,
                 },
             )
         )
@@ -190,10 +205,11 @@ def print_report(task_name, events, result):
             args = e.data.get("arguments", {})
             print(f"    ⚙️  {tool} {args}")
         elif e.event_type == EventType.TOOL_CALL_END:
+            duration = e.data.get("duration_ms", 0)
             if e.data.get("blocked"):
-                print("       └─ 🔒 BLOCKED")
+                print(f"       └─ 🔒 BLOCKED ({duration}ms)")
             else:
-                print("       └─ ✅ ok")
+                print(f"       └─ ✅ ok ({duration}ms)")
 
 
 def main():
@@ -201,9 +217,11 @@ def main():
     print("=" * 60)
     run_simulation("安全 Agent：读取笔记并搜索", SAFE_ACTIONS)
     run_simulation("危险 Agent：删除目录 + 篡改系统文件", DANGEROUS_ACTIONS)
+    run_simulation("卡死 Agent：合法但超长的工具调用", STUCK_ACTIONS)
     print("\n" + "=" * 60)
     print("结论：PermissionPolicy 在 tool 执行前拦截危险操作，")
-    print("SafetyScorer 事后用同一模式库给出可解释的安全分与告警。")
+    print("SafetyScorer 事后用同一模式库给出可解释的安全分与告警；")
+    print("超长工具调用（>30s）会拉低 stability 维度分。")
 
 
 if __name__ == "__main__":
